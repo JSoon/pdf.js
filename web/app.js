@@ -56,6 +56,7 @@ import { AutomationEventBus, EventBus } from "./event_utils.js";
 import { LinkTarget, PDFLinkService } from "./pdf_link_service.js";
 import { AltTextManager } from "web-alt_text_manager";
 import { AnnotationEditorParams } from "web-annotation_editor_params";
+import { CustomHighlight } from "./custom_highlight.js";
 import { DownloadManager } from "web-download_manager";
 import { ExternalServices } from "web-external_services";
 import { OverlayManager } from "./overlay_manager.js";
@@ -1895,6 +1896,15 @@ const PDFViewerApplication = {
       );
       eventBus._on("reporttelemetry", webViewerReportTelemetry);
     }
+
+    CustomHighlight([
+      "银河麒麟桌面操作系统 V1",
+      "麒麟",
+      "与技术",
+      "nvm",
+      "electron-builder",
+      "安装管理 Nodejs、添加nvm 离线安装 Nodejs 方法",
+    ]);
   },
 
   bindWindowEvents() {
