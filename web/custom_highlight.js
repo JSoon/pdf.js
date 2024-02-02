@@ -29,6 +29,13 @@ function findLongestCommonSubstring(str1, str2) {
   return longestSubstring;
 }
 
+// 清除所有自定义高亮
+function removeCustomHighlight() {
+  console.warn("removeCustomHighlight");
+  const nodes = document.querySelectorAll("[custom-highlight]");
+  nodes.forEach(n => n.remove());
+}
+
 // 文本层自定义高亮
 function CustomHighlight(searchKeywords = []) {
   if (!searchKeywords.length) {
@@ -37,12 +44,12 @@ function CustomHighlight(searchKeywords = []) {
   window.PDFViewerApplication.eventBus.on(
     "textlayerrendered",
     ({ source: pageView, pageNumber, numTextDivs, error }) => {
-      // console.log("textlayerrendered", {
-      //   pageView,
-      //   pageNumber,
-      //   numTextDivs,
-      //   error,
-      // });
+      console.warn("textlayerrendered", {
+        pageView,
+        pageNumber,
+        numTextDivs,
+        error,
+      });
       // console.log("pageView.textLayer", pageView.textLayer);
 
       // 遍历 textItems, 从 i0 -> in, i1 -> in, ..., in-1 -> in,
@@ -50,6 +57,7 @@ function CustomHighlight(searchKeywords = []) {
       searchKeywords.forEach(keywords => {
         const textItems = pageView.textLayer.textContentItemsStr;
         // console.log("textItems", textItems);
+        // 获取所有匹配字符串
         const matchedArr = []; // 匹配结果数组
         for (let i = 0; i < textItems.length; i += 1) {
           // 剩余字符串长度
@@ -94,10 +102,17 @@ function CustomHighlight(searchKeywords = []) {
           }
         }
 
-        console.log("matchedArr", pageNumber, keywords, matchedArr);
+        // console.log("matchedArr", pageNumber, keywords, matchedArr);
 
         // 高亮所有匹配字符串
         matchedArr.forEach(({ start, end }) => {
+          // 判断高亮是否已存在，若存在则不再新增
+          const existed = document.querySelector(
+            `[custom-highlight="${pageNumber}-${start}-${end}"]`
+          );
+          if (existed) {
+            return;
+          }
           // 单个匹配字符串完全包含关键字
           if (start === end) {
             const node = pageView.textLayer.textDivs[start].cloneNode(true);
@@ -107,11 +122,16 @@ function CustomHighlight(searchKeywords = []) {
               regex,
               "<strong style='border: 1px solid red; background-color: rgba(255, 0, 0, 0.25);'>$1</strong>"
             );
+            // 添加标记，以便销毁
+            node.setAttribute(
+              "custom-highlight",
+              `${pageNumber}-${start}-${end}`
+            );
+            // 将高亮节点添加到文本层
             pageView.textLayer.div.append(node);
           }
           // 多个匹配字符串完全包含关键字
           else {
-            console.log("多个匹配字符串完全包含关键字");
             let fullContainedStr = "";
             for (let i = start; i <= end; i += 1) {
               const node = pageView.textLayer.textDivs[i].cloneNode(true);
@@ -122,7 +142,7 @@ function CustomHighlight(searchKeywords = []) {
                   keywords
                 );
                 fullContainedStr += firstHalfContainedStr;
-                console.log("firstHalfContainedStr", firstHalfContainedStr);
+                // console.log("firstHalfContainedStr", firstHalfContainedStr);
                 const regex = new RegExp(`(${firstHalfContainedStr})`);
                 // eslint-disable-next-line no-unsanitized/property
                 node.innerHTML = node.innerHTML.replace(
@@ -132,7 +152,7 @@ function CustomHighlight(searchKeywords = []) {
               }
               // 处理中间完全匹配的字符串
               else if (i > start && i < end) {
-                console.log("fullContainedStr", node.innerHTML);
+                // console.log("fullContainedStr", node.innerHTML);
                 node.style.border = "1px solid red";
                 node.style.backgroundColor = "rgba(255, 0, 0, 0.25)";
                 fullContainedStr += node.innerHTML;
@@ -142,7 +162,7 @@ function CustomHighlight(searchKeywords = []) {
                 const lastHalfContainedStr = keywords.substring(
                   fullContainedStr.length
                 );
-                console.log("lastHalfContainedStr", lastHalfContainedStr);
+                // console.log("lastHalfContainedStr", lastHalfContainedStr);
                 const regex = new RegExp(`(${lastHalfContainedStr})`);
                 // eslint-disable-next-line no-unsanitized/property
                 node.innerHTML = node.innerHTML.replace(
@@ -150,6 +170,12 @@ function CustomHighlight(searchKeywords = []) {
                   "<strong style='border: 1px solid red; background-color: rgba(255, 0, 0, 0.25);'>$1</strong>"
                 );
               }
+              // 添加标记，以便销毁
+              node.setAttribute(
+                "custom-highlight",
+                `${pageNumber}-${start}-${end}`
+              );
+              // 将高亮节点添加到文本层
               pageView.textLayer.div.append(node);
             }
           }
@@ -159,4 +185,4 @@ function CustomHighlight(searchKeywords = []) {
   );
 }
 
-export { CustomHighlight };
+export { CustomHighlight, removeCustomHighlight };

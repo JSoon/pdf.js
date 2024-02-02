@@ -1907,6 +1907,9 @@ const PDFViewerApplication = {
       "nvm",
       "electron-builder",
       "安装管理 Nodejs、添加nvm 离线安装 Nodejs 方法",
+      "小朵",
+      "似人员、联",
+      "udou; yaoz",
     ]);
   },
 
