@@ -1,4 +1,10 @@
-// 查找两个字符串最长的共同部分
+/**
+ * 查找两个字符串最长的共同部分
+ * @param {string} str1
+ * @param {string} str2
+ * @see {@link https://www.geeksforgeeks.org/javascript-program-to-find-longest-common-substring-between-two-strings/}
+ * @returns 公共部分
+ */
 function findLongestCommonSubstring(str1, str2) {
   let longestSubstring = "";
 
