@@ -66,6 +66,7 @@ class DrawLayer {
   #createSVG(box) {
     const svg = DrawLayer._svgFactory.create(1, 1, /* skipDimensions = */ true);
     this.#parent.append(svg);
+    svg.setAttribute("aria-hidden", true);
     DrawLayer.#setBox(svg, box);
 
     return svg;
@@ -154,6 +155,7 @@ class DrawLayer {
       use.setAttribute("stroke", "none");
       use.setAttribute("fill", "black");
       use.setAttribute("fill-rule", "nonzero");
+      use.classList.add("mask");
     }
 
     const use1 = DrawLayer._svgFactory.createElement("use");
@@ -183,7 +185,6 @@ class DrawLayer {
     const root = this.#mapping.get(id);
     const defs = root.firstChild;
     const path = defs.firstChild;
-    this.updateBox(id, line.box);
     path.setAttribute("d", line.toSVGPath());
   }
 
@@ -198,6 +199,10 @@ class DrawLayer {
 
   updateBox(id, box) {
     DrawLayer.#setBox(this.#mapping.get(id), box);
+  }
+
+  show(id, visible) {
+    this.#mapping.get(id).classList.toggle("hidden", !visible);
   }
 
   rotate(id, angle) {

@@ -85,15 +85,52 @@ function closePages(pages) {
   );
 }
 
+async function waitForSandboxTrip(page) {
+  const handle = await page.evaluateHandle(() => [
+    new Promise(resolve => {
+      window.addEventListener("sandboxtripend", resolve, { once: true });
+      window.PDFViewerApplication.pdfScriptingManager.sandboxTrip();
+    }),
+  ]);
+  await awaitPromise(handle);
+}
+
+function waitForTimeout(milliseconds) {
+  /**
+   * Wait for the given number of milliseconds.
+   *
+   * Note that waiting for an arbitrary time in tests is discouraged because it
+   * can easily cause intermittent failures, which is why this functionality is
+   * no longer provided by Puppeteer 22+ and we have to implement it ourselves
+   * for the remaining callers in the integration tests. We should avoid
+   * creating new usages of this function; instead please refer to the better
+   * alternatives at https://github.com/puppeteer/puppeteer/pull/11780.
+   */
+  return new Promise(resolve => {
+    setTimeout(resolve, milliseconds);
+  });
+}
+
 async function clearInput(page, selector) {
   await page.click(selector);
   await kbSelectAll(page);
   await page.keyboard.press("Backspace");
-  await page.waitForTimeout(10);
+  await page.waitForFunction(
+    `document.querySelector('${selector}').value === ""`
+  );
 }
 
 function getSelector(id) {
   return `[data-element-id="${id}"]`;
+}
+
+async function getRect(page, selector) {
+  // In Chrome something is wrong when serializing a `DomRect`,
+  // so we extract the values and return them ourselves.
+  return page.$eval(selector, el => {
+    const { x, y, width, height } = el.getBoundingClientRect();
+    return { x, y, width, height };
+  });
 }
 
 function getQuerySelector(id) {
@@ -118,6 +155,27 @@ function getSelectedEditors(page) {
     results.sort();
     return results;
   });
+}
+
+async function getSpanRectFromText(page, pageNumber, text) {
+  await page.waitForSelector(
+    `.page[data-page-number="${pageNumber}"] > .textLayer .endOfContent`
+  );
+  return page.evaluate(
+    (number, content) => {
+      for (const el of document.querySelectorAll(
+        `.page[data-page-number="${number}"] > .textLayer > span`
+      )) {
+        if (el.textContent === content) {
+          const { x, y, width, height } = el.getBoundingClientRect();
+          return { x, y, width, height };
+        }
+      }
+      return null;
+    },
+    pageNumber,
+    text
+  );
 }
 
 async function waitForEvent(page, eventName, timeout = 5000) {
@@ -190,11 +248,75 @@ async function mockClipboard(pages) {
   );
 }
 
+async function pasteFromClipboard(page, data, selector, timeout = 100) {
+  await page.evaluate(async dat => {
+    const items = Object.create(null);
+    for (const [type, value] of Object.entries(dat)) {
+      if (value.startsWith("data:")) {
+        const resp = await fetch(value);
+        items[type] = await resp.blob();
+      } else {
+        items[type] = new Blob([value], { type });
+      }
+    }
+    await navigator.clipboard.write([new ClipboardItem(items)]);
+  }, data);
+
+  let hasPasteEvent = false;
+  while (!hasPasteEvent) {
+    // We retry to paste if nothing has been pasted before the timeout.
+    const handle = await page.evaluateHandle(
+      (sel, timeOut) => {
+        let callback = null;
+        return [
+          Promise.race([
+            new Promise(resolve => {
+              callback = e => resolve(e.clipboardData.items.length !== 0);
+              (sel ? document.querySelector(sel) : document).addEventListener(
+                "paste",
+                callback,
+                {
+                  once: true,
+                }
+              );
+            }),
+            new Promise(resolve => {
+              setTimeout(() => {
+                document
+                  .querySelector(sel)
+                  .removeEventListener("paste", callback);
+                resolve(false);
+              }, timeOut);
+            }),
+          ]),
+        ];
+      },
+      selector,
+      timeout
+    );
+    await kbPaste(page);
+    hasPasteEvent = await awaitPromise(handle);
+  }
+}
+
 async function getSerialized(page, filter = undefined) {
   const values = await page.evaluate(() => {
     const { map } =
       window.PDFViewerApplication.pdfDocument.annotationStorage.serializable;
-    return map ? [...map.values()] : [];
+    if (!map) {
+      return [];
+    }
+    const vals = Array.from(map.values());
+    for (const value of vals) {
+      for (const [k, v] of Object.entries(value)) {
+        // Puppeteer don't serialize typed array correctly, so we convert them
+        // to arrays.
+        if (ArrayBuffer.isView(v)) {
+          value[k] = Array.from(v);
+        }
+      }
+    }
+    return vals;
   });
   return filter ? values.map(filter) : values;
 }
@@ -212,16 +334,18 @@ function getAnnotationStorage(page) {
   );
 }
 
-function waitForEntryInStorage(page, key, value) {
+function waitForEntryInStorage(page, key, value, checker = (x, y) => x === y) {
   return page.waitForFunction(
-    (k, v) => {
+    (k, v, c) => {
       const { map } =
         window.PDFViewerApplication.pdfDocument.annotationStorage.serializable;
-      return map && JSON.stringify(map.get(k)) === v;
+      // eslint-disable-next-line no-eval
+      return map && eval(`(${c})`)(JSON.stringify(map.get(k)), v);
     },
     {},
     key,
-    JSON.stringify(value)
+    JSON.stringify(value),
+    checker.toString()
   );
 }
 
@@ -276,7 +400,6 @@ async function serializeBitmapDimensions(page) {
 async function dragAndDropAnnotation(page, startX, startY, tX, tY) {
   await page.mouse.move(startX, startY);
   await page.mouse.down();
-  await page.waitForTimeout(10);
   await page.mouse.move(startX + tX, startY + tY);
   await page.mouse.up();
   await page.waitForSelector("#viewer:not(.noUserSelect)");
@@ -291,20 +414,16 @@ function waitForAnnotationEditorLayer(page) {
   });
 }
 
-async function waitForTextLayer(page) {
-  const handle = await createPromise(page, resolve => {
-    window.PDFViewerApplication.eventBus.on("textlayerrendered", resolve);
-  });
-  return awaitPromise(handle);
-}
-
 async function scrollIntoView(page, selector) {
   const handle = await page.evaluateHandle(
     sel => [
       new Promise(resolve => {
-        document
-          .getElementById("viewerContainer")
-          .addEventListener("scrollend", resolve, { once: true });
+        const container = document.getElementById("viewerContainer");
+        if (container.scrollHeight <= container.clientHeight) {
+          resolve();
+          return;
+        }
+        container.addEventListener("scrollend", resolve, { once: true });
         const element = document.querySelector(sel);
         element.scrollIntoView({ behavior: "instant", block: "start" });
       }),
@@ -314,11 +433,23 @@ async function scrollIntoView(page, selector) {
   return awaitPromise(handle);
 }
 
+async function firstPageOnTop(page) {
+  const handle = await page.evaluateHandle(() => [
+    new Promise(resolve => {
+      const container = document.getElementById("viewerContainer");
+      if (container.scrollTop === 0 && container.scrollLeft === 0) {
+        resolve();
+        return;
+      }
+      container.addEventListener("scrollend", resolve, { once: true });
+      container.scrollTo(0, 0);
+    }),
+  ]);
+  return awaitPromise(handle);
+}
+
 async function hover(page, selector) {
-  const rect = await page.$eval(selector, el => {
-    const { x, y, width, height } = el.getBoundingClientRect();
-    return { x, y, width, height };
-  });
+  const rect = await getRect(page, selector);
   await page.mouse.move(rect.x + rect.width / 2, rect.y + rect.height / 2);
 }
 
@@ -445,12 +576,48 @@ async function kbDeleteLastWord(page) {
   }
 }
 
+async function kbFocusNext(page) {
+  const handle = await createPromise(page, resolve => {
+    window.addEventListener("focusin", resolve, { once: true });
+  });
+  await page.keyboard.press("Tab");
+  await awaitPromise(handle);
+}
+
+async function kbFocusPrevious(page) {
+  const handle = await createPromise(page, resolve => {
+    window.addEventListener("focusin", resolve, { once: true });
+  });
+  await page.keyboard.down("Shift");
+  await page.keyboard.press("Tab");
+  await page.keyboard.up("Shift");
+  await awaitPromise(handle);
+}
+
+async function switchToEditor(name, page, disable = false) {
+  const modeChangedHandle = await createPromise(page, resolve => {
+    window.PDFViewerApplication.eventBus.on(
+      "annotationeditormodechanged",
+      resolve,
+      { once: true }
+    );
+  });
+  await page.click(`#editor${name}`);
+  name = name.toLowerCase();
+  await page.waitForSelector(
+    ".annotationEditorLayer" +
+      (disable ? `:not(.${name}Editing)` : `.${name}Editing`)
+  );
+  await awaitPromise(modeChangedHandle);
+}
+
 export {
   awaitPromise,
   clearInput,
   closePages,
   createPromise,
   dragAndDropAnnotation,
+  firstPageOnTop,
   getAnnotationStorage,
   getComputedStyleSelector,
   getEditorDimensions,
@@ -458,9 +625,11 @@ export {
   getEditorSelector,
   getFirstSerialized,
   getQuerySelector,
+  getRect,
   getSelectedEditors,
   getSelector,
   getSerialized,
+  getSpanRectFromText,
   hover,
   kbBigMoveDown,
   kbBigMoveLeft,
@@ -468,6 +637,8 @@ export {
   kbBigMoveUp,
   kbCopy,
   kbDeleteLastWord,
+  kbFocusNext,
+  kbFocusPrevious,
   kbGoToBegin,
   kbGoToEnd,
   kbModifierDown,
@@ -478,14 +649,17 @@ export {
   kbUndo,
   loadAndWait,
   mockClipboard,
+  pasteFromClipboard,
   scrollIntoView,
   serializeBitmapDimensions,
+  switchToEditor,
   waitForAnnotationEditorLayer,
   waitForEntryInStorage,
   waitForEvent,
+  waitForSandboxTrip,
   waitForSelectedEditor,
   waitForSerialized,
   waitForStorageEntries,
-  waitForTextLayer,
+  waitForTimeout,
   waitForUnselectedEditor,
 };

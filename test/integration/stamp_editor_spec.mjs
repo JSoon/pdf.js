@@ -19,14 +19,22 @@ import {
   getEditorDimensions,
   getEditorSelector,
   getFirstSerialized,
+  getRect,
   kbBigMoveDown,
   kbBigMoveRight,
+  kbCopy,
   kbPaste,
   kbSelectAll,
+  kbUndo,
   loadAndWait,
+  pasteFromClipboard,
+  scrollIntoView,
   serializeBitmapDimensions,
+  switchToEditor,
   waitForAnnotationEditorLayer,
+  waitForEntryInStorage,
   waitForSelectedEditor,
+  waitForSerialized,
   waitForStorageEntries,
 } from "./test_utils.mjs";
 import { fileURLToPath } from "url";
@@ -68,45 +76,16 @@ const copyImage = async (page, imagePath, number) => {
   const data = fs
     .readFileSync(path.join(__dirname, imagePath))
     .toString("base64");
-  await page.evaluate(async imageData => {
-    const resp = await fetch(`data:image/png;base64,${imageData}`);
-    const blob = await resp.blob();
-
-    await navigator.clipboard.write([
-      new ClipboardItem({
-        [blob.type]: blob,
-      }),
-    ]);
-  }, data);
-
-  let hasPasteEvent = false;
-  while (!hasPasteEvent) {
-    // We retry to paste if nothing has been pasted before 500ms.
-    const handle = await page.evaluateHandle(() => {
-      let callback = null;
-      return [
-        Promise.race([
-          new Promise(resolve => {
-            callback = e => resolve(e.clipboardData.items.length !== 0);
-            document.addEventListener("paste", callback, {
-              once: true,
-            });
-          }),
-          new Promise(resolve => {
-            setTimeout(() => {
-              document.removeEventListener("paste", callback);
-              resolve(false);
-            }, 500);
-          }),
-        ]),
-      ];
-    });
-    await kbPaste(page);
-    hasPasteEvent = await awaitPromise(handle);
-  }
-
+  await pasteFromClipboard(
+    page,
+    { "image/png": `data:image/png;base64,${data}` },
+    "",
+    500
+  );
   await waitForImage(page, getEditorSelector(number));
 };
+
+const switchToStamp = switchToEditor.bind(null, "Stamp");
 
 describe("Stamp Editor", () => {
   describe("Basic operations", () => {
@@ -128,7 +107,7 @@ describe("Stamp Editor", () => {
             return;
           }
 
-          await page.click("#editorStamp");
+          await switchToStamp(page);
           await page.click("#editorStampAddImage");
 
           const input = await page.$("#stampEditorFileInput");
@@ -205,7 +184,7 @@ describe("Stamp Editor", () => {
             return;
           }
 
-          await page.click("#editorStamp");
+          await switchToStamp(page);
           const names = ["bottomLeft", "bottomRight", "topRight", "topLeft"];
 
           for (let i = 0; i < 4; i++) {
@@ -240,16 +219,14 @@ describe("Stamp Editor", () => {
                 `${getEditorSelector(i)} .resizers:not(.hidden)`
               );
 
-              const [name, cursor] = await page.evaluate(() => {
-                const { x, y } = document
-                  .querySelector(".stampEditor")
-                  .getBoundingClientRect();
-                const el = document.elementFromPoint(x, y);
+              const stampRect = await getRect(page, ".stampEditor");
+              const [name, cursor] = await page.evaluate(rect => {
+                const el = document.elementFromPoint(rect.x, rect.y);
                 const cornerName = Array.from(el.classList).find(
                   c => c !== "resizer"
                 );
                 return [cornerName, window.getComputedStyle(el).cursor];
-              });
+              }, stampRect);
 
               expect(name).withContext(`In ${browserName}`).toEqual(names[j]);
               expect(cursor)
@@ -282,7 +259,7 @@ describe("Stamp Editor", () => {
     it("must check that the alt-text flow is correctly implemented", async () => {
       await Promise.all(
         pages.map(async ([browserName, page]) => {
-          await page.click("#editorStamp");
+          await switchToStamp(page);
 
           await copyImage(page, "../images/firefox_logo.png", 0);
 
@@ -451,7 +428,7 @@ describe("Stamp Editor", () => {
     it("must check that the dimensions change", async () => {
       await Promise.all(
         pages.map(async ([browserName, page]) => {
-          await page.click("#editorStamp");
+          await switchToStamp(page);
 
           await copyImage(page, "../images/firefox_logo.png", 0);
 
@@ -566,6 +543,210 @@ describe("Stamp Editor", () => {
           await page.waitForFunction(
             () => !document.activeElement?.classList.contains("resizer")
           );
+        })
+      );
+    });
+  });
+
+  describe("Copy/paste from a tab to an other", () => {
+    let pages1, pages2;
+
+    beforeAll(async () => {
+      pages1 = await loadAndWait("empty.pdf", ".annotationEditorLayer");
+      pages2 = await loadAndWait("empty.pdf", ".annotationEditorLayer");
+    });
+
+    afterAll(async () => {
+      await closePages(pages1);
+      await closePages(pages2);
+    });
+
+    it("must check that the alt-text button is here when pasting in the second tab", async () => {
+      for (let i = 0; i < pages1.length; i++) {
+        const [, page1] = pages1[i];
+        page1.bringToFront();
+        await page1.click("#editorStamp");
+
+        await copyImage(page1, "../images/firefox_logo.png", 0);
+        await kbCopy(page1);
+
+        const [, page2] = pages2[i];
+        page2.bringToFront();
+        await page2.click("#editorStamp");
+
+        await kbPaste(page2);
+
+        await waitForImage(page2, getEditorSelector(0));
+        await page2.waitForSelector(`${getEditorSelector(0)} .altText`);
+      }
+    });
+  });
+
+  describe("Undo a stamp", () => {
+    let pages;
+
+    beforeAll(async () => {
+      pages = await loadAndWait("tracemonkey.pdf", ".annotationEditorLayer");
+    });
+
+    afterAll(async () => {
+      await closePages(pages);
+    });
+
+    it("must check that a stamp can be undone", async () => {
+      await Promise.all(
+        pages.map(async ([browserName, page]) => {
+          await switchToStamp(page);
+
+          await copyImage(page, "../images/firefox_logo.png", 0);
+          await page.waitForSelector(getEditorSelector(0));
+          await waitForSerialized(page, 1);
+
+          await page.waitForSelector(`${getEditorSelector(0)} button.delete`);
+          await page.click(`${getEditorSelector(0)} button.delete`);
+          await waitForSerialized(page, 0);
+
+          await kbUndo(page);
+          await waitForSerialized(page, 1);
+          await page.waitForSelector(getEditorSelector(0));
+        })
+      );
+    });
+  });
+
+  describe("Delete a stamp and undo it on another page", () => {
+    let pages;
+
+    beforeAll(async () => {
+      pages = await loadAndWait("tracemonkey.pdf", ".annotationEditorLayer");
+    });
+
+    afterAll(async () => {
+      await closePages(pages);
+    });
+
+    it("must check that a stamp can be undone", async () => {
+      await Promise.all(
+        pages.map(async ([browserName, page]) => {
+          await switchToStamp(page);
+
+          await copyImage(page, "../images/firefox_logo.png", 0);
+          await page.waitForSelector(getEditorSelector(0));
+          await waitForSerialized(page, 1);
+
+          await page.waitForSelector(`${getEditorSelector(0)} button.delete`);
+          await page.click(`${getEditorSelector(0)} button.delete`);
+          await waitForSerialized(page, 0);
+
+          const twoToFourteen = Array.from(new Array(13).keys(), n => n + 2);
+          for (const pageNumber of twoToFourteen) {
+            const pageSelector = `.page[data-page-number = "${pageNumber}"]`;
+            await scrollIntoView(page, pageSelector);
+          }
+
+          await kbUndo(page);
+          await waitForSerialized(page, 1);
+
+          const thirteenToOne = Array.from(new Array(13).keys(), n => 13 - n);
+          for (const pageNumber of thirteenToOne) {
+            const pageSelector = `.page[data-page-number = "${pageNumber}"]`;
+            await scrollIntoView(page, pageSelector);
+          }
+
+          await page.waitForSelector(getEditorSelector(0));
+        })
+      );
+    });
+  });
+
+  describe("Delete a stamp, scroll and undo it", () => {
+    let pages;
+
+    beforeAll(async () => {
+      pages = await loadAndWait("tracemonkey.pdf", ".annotationEditorLayer");
+    });
+
+    afterAll(async () => {
+      await closePages(pages);
+    });
+
+    it("must check that a stamp can be undone", async () => {
+      await Promise.all(
+        pages.map(async ([browserName, page]) => {
+          await switchToStamp(page);
+
+          await copyImage(page, "../images/firefox_logo.png", 0);
+          await page.waitForSelector(getEditorSelector(0));
+          await waitForSerialized(page, 1);
+
+          await page.waitForSelector(`${getEditorSelector(0)} button.delete`);
+          await page.click(`${getEditorSelector(0)} button.delete`);
+          await waitForSerialized(page, 0);
+
+          const twoToOne = Array.from(new Array(13).keys(), n => n + 2).concat(
+            Array.from(new Array(13).keys(), n => 13 - n)
+          );
+          for (const pageNumber of twoToOne) {
+            const pageSelector = `.page[data-page-number = "${pageNumber}"]`;
+            await scrollIntoView(page, pageSelector);
+          }
+
+          await kbUndo(page);
+          await waitForSerialized(page, 1);
+          await page.waitForSelector(getEditorSelector(0));
+        })
+      );
+    });
+  });
+
+  describe("Resize a stamp", () => {
+    let pages;
+
+    beforeAll(async () => {
+      pages = await loadAndWait("empty.pdf", ".annotationEditorLayer");
+    });
+
+    afterAll(async () => {
+      await closePages(pages);
+    });
+
+    it("must check that a resized stamp has its canvas at the right position", async () => {
+      await Promise.all(
+        pages.map(async ([browserName, page]) => {
+          await switchToStamp(page);
+
+          await copyImage(page, "../images/firefox_logo.png", 0);
+          await page.waitForSelector(getEditorSelector(0));
+          await waitForSerialized(page, 1);
+
+          const serializedRect = await getFirstSerialized(page, x => x.rect);
+          const rect = await getRect(page, ".resizer.bottomRight");
+          const centerX = rect.x + rect.width / 2;
+          const centerY = rect.y + rect.height / 2;
+
+          await page.mouse.move(centerX, centerY);
+          await page.mouse.down();
+          await page.mouse.move(centerX - 500, centerY - 500);
+          await page.mouse.up();
+
+          await waitForEntryInStorage(
+            page,
+            "rect",
+            serializedRect,
+            (x, y) => x !== y
+          );
+
+          const canvasRect = await getRect(
+            page,
+            `${getEditorSelector(0)} canvas`
+          );
+          const stampRect = await getRect(page, getEditorSelector(0));
+
+          expect(
+            ["x", "y", "width", "height"].every(
+              key => Math.abs(canvasRect[key] - stampRect[key]) <= 10
+            )
+          ).toBeTrue();
         })
       );
     });

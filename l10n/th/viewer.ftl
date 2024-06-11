@@ -293,8 +293,15 @@ pdfjs-editor-ink-button-label = รูปวาด
 pdfjs-editor-stamp-button =
     .title = เพิ่มหรือแก้ไขภาพ
 pdfjs-editor-stamp-button-label = เพิ่มหรือแก้ไขภาพ
-pdfjs-editor-remove-button =
-    .title = เอาออก
+pdfjs-editor-highlight-button =
+    .title = เน้น
+pdfjs-editor-highlight-button-label = เน้น
+pdfjs-highlight-floating-button =
+    .title = เน้นสี
+pdfjs-highlight-floating-button1 =
+    .title = เน้นสี
+    .aria-label = เน้นสี
+pdfjs-highlight-floating-button-label = เน้นสี
 
 ## Remove button for the various kind of editor.
 
@@ -318,6 +325,10 @@ pdfjs-editor-ink-opacity-input = ความทึบ
 pdfjs-editor-stamp-add-image-button =
     .title = เพิ่มภาพ
 pdfjs-editor-stamp-add-image-button-label = เพิ่มภาพ
+# This refers to the thickness of the line used for free highlighting (not bound to text)
+pdfjs-editor-free-highlight-thickness-input = ความหนา
+pdfjs-editor-free-highlight-thickness-title =
+    .title = เปลี่ยนความหนาเมื่อเน้นรายการอื่นๆ ที่ไม่ใช่ข้อความ
 pdfjs-free-text =
     .aria-label = ตัวแก้ไขข้อความ
 pdfjs-free-text-default-content = เริ่มพิมพ์…
@@ -374,3 +385,10 @@ pdfjs-editor-colorpicker-pink =
     .title = ชมพู
 pdfjs-editor-colorpicker-red =
     .title = แดง
+
+## Show all highlights
+## This is a toggle button to show/hide all the highlights.
+
+pdfjs-editor-highlight-show-all-button-label = แสดงทั้งหมด
+pdfjs-editor-highlight-show-all-button =
+    .title = แสดงทั้งหมด

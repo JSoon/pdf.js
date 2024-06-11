@@ -13,6 +13,8 @@
  * limitations under the License.
  */
 
+/** @typedef {import("./event_utils.js").EventBus} EventBus */
+
 import {
   CursorTool,
   ScrollMode,
@@ -182,6 +184,7 @@ class SecondaryToolbar {
     this.#updateUIState();
 
     // Reset the Scroll/Spread buttons too, since they're document specific.
+    this.eventBus.dispatch("switchcursortool", { source: this, reset: true });
     this.#scrollModeChanged({ mode: ScrollMode.VERTICAL });
     this.#spreadModeChanged({ mode: SpreadMode.NONE });
   }

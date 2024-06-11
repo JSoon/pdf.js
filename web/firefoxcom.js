@@ -18,12 +18,16 @@ import { BaseExternalServices } from "./external_services.js";
 import { BasePreferences } from "./preferences.js";
 import { DEFAULT_SCALE_VALUE } from "./ui_utils.js";
 import { L10n } from "./l10n.js";
-import { PDFViewerApplication } from "./app.js";
 
 if (typeof PDFJSDev === "undefined" || !PDFJSDev.test("MOZCENTRAL")) {
   throw new Error(
     'Module "./firefoxcom.js" shall not be used outside MOZCENTRAL builds.'
   );
+}
+
+let viewerApp = { initialized: false };
+function initCom(app) {
+  viewerApp = app;
 }
 
 class FirefoxCom {
@@ -136,8 +140,10 @@ class DownloadManager {
     return false;
   }
 
-  download(blob, url, filename, options = {}) {
-    const blobUrl = URL.createObjectURL(blob);
+  download(data, url, filename, options = {}) {
+    const blobUrl = URL.createObjectURL(
+      new Blob([data], { type: "application/pdf" })
+    );
 
     FirefoxCom.request("download", {
       blobUrl,
@@ -167,14 +173,14 @@ class Preferences extends BasePreferences {
   const findLen = "find".length;
 
   const handleEvent = function ({ type, detail }) {
-    if (!PDFViewerApplication.initialized) {
+    if (!viewerApp.initialized) {
       return;
     }
     if (type === "findbarclose") {
-      PDFViewerApplication.eventBus.dispatch(type, { source: window });
+      viewerApp.eventBus.dispatch(type, { source: window });
       return;
     }
-    PDFViewerApplication.eventBus.dispatch("find", {
+    viewerApp.eventBus.dispatch("find", {
       source: window,
       type: type.substring(findLen),
       query: detail.query,
@@ -194,18 +200,18 @@ class Preferences extends BasePreferences {
 (function listenZoomEvents() {
   const events = ["zoomin", "zoomout", "zoomreset"];
   const handleEvent = function ({ type, detail }) {
-    if (!PDFViewerApplication.initialized) {
+    if (!viewerApp.initialized) {
       return;
     }
     // Avoid attempting to needlessly reset the zoom level *twice* in a row,
     // when using the `Ctrl + 0` keyboard shortcut.
     if (
       type === "zoomreset" &&
-      PDFViewerApplication.pdfViewer.currentScaleValue === DEFAULT_SCALE_VALUE
+      viewerApp.pdfViewer.currentScaleValue === DEFAULT_SCALE_VALUE
     ) {
       return;
     }
-    PDFViewerApplication.eventBus.dispatch(type, { source: window });
+    viewerApp.eventBus.dispatch(type, { source: window });
   };
 
   for (const event of events) {
@@ -215,10 +221,10 @@ class Preferences extends BasePreferences {
 
 (function listenSaveEvent() {
   const handleEvent = function ({ type, detail }) {
-    if (!PDFViewerApplication.initialized) {
+    if (!viewerApp.initialized) {
       return;
     }
-    PDFViewerApplication.eventBus.dispatch("download", { source: window });
+    viewerApp.eventBus.dispatch("download", { source: window });
   };
 
   window.addEventListener("save", handleEvent);
@@ -226,10 +232,10 @@ class Preferences extends BasePreferences {
 
 (function listenEditingEvent() {
   const handleEvent = function ({ detail }) {
-    if (!PDFViewerApplication.initialized) {
+    if (!viewerApp.initialized) {
       return;
     }
-    PDFViewerApplication.eventBus.dispatch("editingaction", {
+    viewerApp.eventBus.dispatch("editingaction", {
       source: window,
       name: detail.name,
     });
@@ -242,9 +248,9 @@ if (PDFJSDev.test("GECKOVIEW")) {
   (function listenQueryEvents() {
     window.addEventListener("pdf.js.query", async ({ detail: { queryId } }) => {
       let result = null;
-      if (queryId === "canDownloadInsteadOfPrint") {
+      if (viewerApp.initialized && queryId === "canDownloadInsteadOfPrint") {
         result = false;
-        const { pdfDocument, pdfViewer } = PDFViewerApplication;
+        const { pdfDocument, pdfViewer } = viewerApp;
         if (pdfDocument) {
           try {
             const hasUnchangedAnnotations =
@@ -254,14 +260,8 @@ if (PDFJSDev.test("GECKOVIEW")) {
             const hasWillPrint =
               pdfViewer.enableScripting &&
               !!(await pdfDocument.getJSActions())?.WillPrint;
-            const hasUnchangedOptionalContent = (
-              await pdfViewer.optionalContentConfigPromise
-            ).hasInitialVisibility;
 
-            result =
-              hasUnchangedAnnotations &&
-              !hasWillPrint &&
-              hasUnchangedOptionalContent;
+            result = hasUnchangedAnnotations && !hasWillPrint;
           } catch {
             console.warn("Unable to check if the document can be downloaded.");
           }
@@ -310,6 +310,12 @@ class FirefoxScripting {
   }
 }
 
+class MLManager {
+  guess(data) {
+    return FirefoxCom.requestAsync("mlGuess", data);
+  }
+}
+
 class ExternalServices extends BaseExternalServices {
   updateFindControlState(data) {
     FirefoxCom.request("updateFindControlState", data);
@@ -319,7 +325,7 @@ class ExternalServices extends BaseExternalServices {
     FirefoxCom.request("updateFindMatchesCount", data);
   }
 
-  initPassiveLoading(callbacks) {
+  initPassiveLoading() {
     let pdfDataRangeTransport;
 
     window.addEventListener("message", function windowMessage(e) {
@@ -336,7 +342,7 @@ class ExternalServices extends BaseExternalServices {
       switch (args.pdfjsLoadAction) {
         case "supportsRangedLoading":
           if (args.done && !args.data) {
-            callbacks.onError();
+            viewerApp._documentError(null);
             break;
           }
           pdfDataRangeTransport = new FirefoxComDataRangeTransport(
@@ -346,7 +352,7 @@ class ExternalServices extends BaseExternalServices {
             args.filename
           );
 
-          callbacks.onOpenWithTransport(pdfDataRangeTransport);
+          viewerApp.open({ range: pdfDataRangeTransport });
           break;
         case "range":
           pdfDataRangeTransport.onDataRange(args.begin, args.chunk);
@@ -365,14 +371,14 @@ class ExternalServices extends BaseExternalServices {
           pdfDataRangeTransport?.onDataProgressiveDone();
           break;
         case "progress":
-          callbacks.onProgress(args.loaded, args.total);
+          viewerApp.progress(args.loaded / args.total);
           break;
         case "complete":
           if (!args.data) {
-            callbacks.onError(args.errorCode);
+            viewerApp._documentError(null, { message: args.errorCode });
             break;
           }
-          callbacks.onOpenWithData(args.data, args.filename);
+          viewerApp.open({ data: args.data, filename: args.filename });
           break;
       }
     });
@@ -380,7 +386,7 @@ class ExternalServices extends BaseExternalServices {
   }
 
   reportTelemetry(data) {
-    FirefoxCom.request("reportTelemetry", JSON.stringify(data));
+    FirefoxCom.request("reportTelemetry", data);
   }
 
   updateEditorStates(data) {
@@ -411,4 +417,4 @@ class ExternalServices extends BaseExternalServices {
   }
 }
 
-export { DownloadManager, ExternalServices, FirefoxCom, Preferences };
+export { DownloadManager, ExternalServices, initCom, MLManager, Preferences };

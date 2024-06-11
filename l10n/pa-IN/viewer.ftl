@@ -51,12 +51,6 @@ pdfjs-download-button-label = ਡਾਊਨਲੋਡ
 pdfjs-bookmark-button =
     .title = ਮੌਜੂਦਾ ਸਫ਼਼ਾ (ਮੌਜੂਦਾ ਸਫ਼ੇ ਤੋਂ URL ਵੇਖੋ)
 pdfjs-bookmark-button-label = ਮੌਜੂਦਾ ਸਫ਼਼ਾ
-# Used in Firefox for Android.
-pdfjs-open-in-app-button =
-    .title = ਐਪ ਵਿੱਚ ਖੋਲ੍ਹੋ
-# Used in Firefox for Android.
-# Length of the translation matters since we are in a mobile context, with limited screen estate.
-pdfjs-open-in-app-button-label = ਐਪ ਵਿੱਚ ਖੋਲ੍ਹੋ
 
 ##  Secondary toolbar and context menu
 
@@ -301,11 +295,15 @@ pdfjs-editor-ink-button-label = ਵਾਹੋ
 pdfjs-editor-stamp-button =
     .title = ਚਿੱਤਰ ਜੋੜੋ ਜਾਂ ਸੋਧੋ
 pdfjs-editor-stamp-button-label = ਚਿੱਤਰ ਜੋੜੋ ਜਾਂ ਸੋਧੋ
-pdfjs-editor-remove-button =
-    .title = ਹਟਾਓ
 pdfjs-editor-highlight-button =
     .title = ਹਾਈਲਾਈਟ
 pdfjs-editor-highlight-button-label = ਹਾਈਲਾਈਟ
+pdfjs-highlight-floating-button =
+    .title = ਹਾਈਲਾਈਟ
+pdfjs-highlight-floating-button1 =
+    .title = ਹਾਈਲਾਈਟ
+    .aria-label = ਹਾਈਲਾਈਟ
+pdfjs-highlight-floating-button-label = ਹਾਈਲਾਈਟ
 
 ## Remove button for the various kind of editor.
 
@@ -329,6 +327,10 @@ pdfjs-editor-ink-opacity-input = ਧੁੰਦਲਾਪਨ
 pdfjs-editor-stamp-add-image-button =
     .title = ਚਿੱਤਰ ਜੋੜੋ
 pdfjs-editor-stamp-add-image-button-label = ਚਿੱਤਰ ਜੋੜੋ
+# This refers to the thickness of the line used for free highlighting (not bound to text)
+pdfjs-editor-free-highlight-thickness-input = ਮੋਟਾਈ
+pdfjs-editor-free-highlight-thickness-title =
+    .title = ਚੀਜ਼ਾਂ ਨੂੰ ਹੋਰ ਲਿਖਤਾਂ ਤੋਂ ਉਘਾੜਨ ਸਮੇਂ ਮੋਟਾਈ ਨੂੰ ਬਦਲੋ
 pdfjs-free-text =
     .aria-label = ਲਿਖਤ ਐਡੀਟਰ
 pdfjs-free-text-default-content = …ਲਿਖਣਾ ਸ਼ੁਰੂ ਕਰੋ
@@ -385,3 +387,10 @@ pdfjs-editor-colorpicker-pink =
     .title = ਗੁਲਾਬੀ
 pdfjs-editor-colorpicker-red =
     .title = ਲਾਲ
+
+## Show all highlights
+## This is a toggle button to show/hide all the highlights.
+
+pdfjs-editor-highlight-show-all-button-label = ਸਭ ਵੇਖੋ
+pdfjs-editor-highlight-show-all-button =
+    .title = ਸਭ ਵੇਖੋ

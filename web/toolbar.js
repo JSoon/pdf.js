@@ -13,6 +13,8 @@
  * limitations under the License.
  */
 
+/** @typedef {import("./event_utils.js").EventBus} EventBus */
+
 import { AnnotationEditorType, ColorPicker, noContextMenu } from "pdfjs-lib";
 import {
   DEFAULT_SCALE,
@@ -125,6 +127,14 @@ class Toolbar {
         { once: true }
       );
     }
+
+    eventBus._on("showannotationeditorui", ({ mode }) => {
+      switch (mode) {
+        case AnnotationEditorType.HIGHLIGHT:
+          options.editorHighlightButton.click();
+          break;
+      }
+    });
 
     this.reset();
   }

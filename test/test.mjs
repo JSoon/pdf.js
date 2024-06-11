@@ -15,7 +15,7 @@
  */
 /* eslint-disable no-var */
 
-import { copySubtreeSync, ensureDirSync, removeDirSync } from "./testutils.mjs";
+import { copySubtreeSync, ensureDirSync } from "./testutils.mjs";
 import {
   downloadManifestFiles,
   verifyManifestFiles,
@@ -25,13 +25,10 @@ import os from "os";
 import path from "path";
 import puppeteer from "puppeteer";
 import readline from "readline";
-import rimraf from "rimraf";
 import { translateFont } from "./font/ttxdriver.mjs";
 import url from "url";
 import { WebServer } from "./webserver.mjs";
 import yargs from "yargs";
-
-const rimrafSync = rimraf.sync;
 
 function parseOptions() {
   const parsedArgs = yargs(process.argv)
@@ -213,7 +210,7 @@ function updateRefImages() {
     console.log("  Updating ref/ ... ");
     copySubtreeSync(refsTmpDir, refsDir);
     if (removeTmp) {
-      removeDirSync(refsTmpDir);
+      fs.rmSync(refsTmpDir, { recursive: true, force: true });
     }
     console.log("done");
   }
@@ -324,7 +321,7 @@ async function startRefTest(masterMode, showRefImages) {
       fs.unlinkSync(eqLog);
     }
     if (fs.existsSync(testResultDir)) {
-      removeDirSync(testResultDir);
+      fs.rmSync(testResultDir, { recursive: true, force: true });
     }
 
     startTime = Date.now();
@@ -358,7 +355,7 @@ async function startRefTest(masterMode, showRefImages) {
   function checkRefsTmp() {
     if (masterMode && fs.existsSync(refsTmpDir)) {
       if (options.noPrompts) {
-        removeDirSync(refsTmpDir);
+        fs.rmSync(refsTmpDir, { recursive: true, force: true });
         setup();
         return;
       }
@@ -370,7 +367,7 @@ async function startRefTest(masterMode, showRefImages) {
         "SHOULD THIS SCRIPT REMOVE tmp/? THINK CAREFULLY [yn] ",
         function (answer) {
           if (answer.toLowerCase() === "y") {
-            removeDirSync(refsTmpDir);
+            fs.rmSync(refsTmpDir, { recursive: true, force: true });
           }
           setup();
           reader.close();
@@ -840,24 +837,14 @@ function unitTestPostHandler(req, res) {
   req.on("data", function (data) {
     body += data;
   });
-  req.on("end", function () {
+  req.on("end", async function () {
     if (pathname === "/ttx") {
-      var onCancel = null,
-        ttxTimeout = 10000;
-      var timeoutId = setTimeout(function () {
-        onCancel?.("TTX timeout");
-      }, ttxTimeout);
-      translateFont(
-        body,
-        function (fn) {
-          onCancel = fn;
-        },
-        function (err, xml) {
-          clearTimeout(timeoutId);
-          res.writeHead(200, { "Content-Type": "text/xml" });
-          res.end(err ? "<error>" + err + "</error>" : xml);
-        }
-      );
+      res.writeHead(200, { "Content-Type": "text/xml" });
+      try {
+        res.end(await translateFont(body));
+      } catch (error) {
+        res.end(`<error>${error}</error>`);
+      }
       return;
     }
 
@@ -888,13 +875,16 @@ function unitTestPostHandler(req, res) {
   return true;
 }
 
-async function startBrowser({ browserName, headless, startUrl }) {
+async function startBrowser({
+  browserName,
+  headless = options.headless,
+  startUrl,
+  extraPrefsFirefox = {},
+}) {
   const options = {
     product: browserName,
     protocol: "cdp",
-    // Note that using `headless: true` gives a deprecation warning; see
-    // https://github.com/puppeteer/puppeteer#default-runtime-settings.
-    headless: headless === true ? "new" : false,
+    headless,
     defaultViewport: null,
     ignoreDefaultArgs: ["--disable-extensions"],
     // The timeout for individual protocol (CDP) calls should always be lower
@@ -951,6 +941,9 @@ async function startBrowser({ browserName, headless, startUrl }) {
       "layout.css.round.enabled": true,
       // This allow to copy some data in the clipboard.
       "dom.events.asyncClipboard.clipboardItem": true,
+      // It's helpful to see where the caret is.
+      "accessibility.browsewithcaret": true,
+      ...extraPrefsFirefox,
     };
   }
 
@@ -1004,7 +997,7 @@ async function startBrowsers({ baseUrl, initializeSession }) {
       startUrl = baseUrl + queryParameters;
     }
 
-    await startBrowser({ browserName, headless: options.headless, startUrl })
+    await startBrowser({ browserName, startUrl })
       .then(function (browser) {
         session.browser = browser;
         initializeSession(session);
@@ -1017,11 +1010,12 @@ async function startBrowsers({ baseUrl, initializeSession }) {
 }
 
 function startServer() {
-  server = new WebServer();
-  server.host = host;
-  server.port = options.port;
-  server.root = "..";
-  server.cacheExpirationTime = 3600;
+  server = new WebServer({
+    root: "..",
+    host,
+    port: options.port,
+    cacheExpirationTime: 3600,
+  });
   server.start();
 }
 
@@ -1047,7 +1041,7 @@ async function closeSession(browser) {
     });
     if (allClosed) {
       if (tempDir) {
-        rimrafSync(tempDir);
+        fs.rmSync(tempDir, { recursive: true, force: true });
       }
       onAllSessionsClosed?.();
     }
@@ -1105,3 +1099,5 @@ var stats;
 var tempDir = null;
 
 main();
+
+export { startBrowser };

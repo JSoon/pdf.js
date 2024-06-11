@@ -13,6 +13,8 @@
  * limitations under the License.
  */
 
+/** @typedef {import("./interfaces.js").IL10n} IL10n */
+
 class BaseExternalServices {
   constructor() {
     if (this.constructor === BaseExternalServices) {
@@ -24,10 +26,13 @@ class BaseExternalServices {
 
   updateFindMatchesCount(data) {}
 
-  initPassiveLoading(callbacks) {}
+  initPassiveLoading() {}
 
   reportTelemetry(data) {}
 
+  /**
+   * @returns {Promise<IL10n>}
+   */
   async createL10n() {
     throw new Error("Not implemented: createL10n");
   }

@@ -26,6 +26,7 @@ async function runTests(results) {
     spec_files: [
       "accessibility_spec.mjs",
       "annotation_spec.mjs",
+      "caret_browsing_spec.mjs",
       "copy_paste_spec.mjs",
       "find_spec.mjs",
       "freetext_editor_spec.mjs",
@@ -34,6 +35,8 @@ async function runTests(results) {
       "scripting_spec.mjs",
       "stamp_editor_spec.mjs",
       "text_field_spec.mjs",
+      "text_layer_spec.mjs",
+      "viewer_spec.mjs",
     ],
   });
 

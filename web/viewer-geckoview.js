@@ -13,8 +13,6 @@
  * limitations under the License.
  */
 
-import "web-com";
-import "web-print_service";
 import { RenderingStates, ScrollMode, SpreadMode } from "./ui_utils.js";
 import { AppOptions } from "./app_options.js";
 import { LinkTarget } from "./pdf_link_service.js";
@@ -46,7 +44,6 @@ function getViewerConfiguration() {
       mainContainer,
       container: document.getElementById("floatingToolbar"),
       download: document.getElementById("download"),
-      openInApp: document.getElementById("openInApp"),
     },
 
     passwordOverlay: {

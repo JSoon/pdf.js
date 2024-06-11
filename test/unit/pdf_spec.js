@@ -29,7 +29,6 @@ import {
   OPS,
   PasswordResponses,
   PermissionFlag,
-  PromiseCapability,
   shadow,
   UnexpectedResponseException,
   Util,
@@ -58,6 +57,7 @@ import {
 } from "../../src/display/display_utils.js";
 import {
   renderTextLayer,
+  TextLayer,
   updateTextLayer,
 } from "../../src/display/text_layer.js";
 import { AnnotationEditorLayer } from "../../src/display/editor/annotation_editor_layer.js";
@@ -105,11 +105,11 @@ const expectedAPI = Object.freeze({
   PDFWorker,
   PermissionFlag,
   PixelsPerInch,
-  PromiseCapability,
   RenderingCancelledException,
   renderTextLayer,
   setLayerDimensions,
   shadow,
+  TextLayer,
   UnexpectedResponseException,
   updateTextLayer,
   Util,

@@ -13,8 +13,14 @@
  * limitations under the License.
  */
 
+/** @typedef {import("./event_utils.js").EventBus} EventBus */
+/** @typedef {import("./interfaces.js").IL10n} IL10n */
+/** @typedef {import("./overlay_manager.js").OverlayManager} OverlayManager */
+// eslint-disable-next-line max-len
+/** @typedef {import("../src/display/api.js").PDFDocumentProxy} PDFDocumentProxy */
+
 import { getPageSizeInches, isPortraitOrientation } from "./ui_utils.js";
-import { PDFDateString, PromiseCapability } from "pdfjs-lib";
+import { PDFDateString } from "pdfjs-lib";
 
 const DEFAULT_FIELD_CONTENT = "-";
 
@@ -200,7 +206,7 @@ class PDFDocumentProperties {
     this.pdfDocument = null;
 
     this.#fieldData = null;
-    this._dataAvailableCapability = new PromiseCapability();
+    this._dataAvailableCapability = Promise.withResolvers();
     this._currentPageNumber = 1;
     this._pagesRotation = 0;
   }
