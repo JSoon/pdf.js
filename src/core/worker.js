@@ -752,6 +752,7 @@ class WorkerMessageHandler {
             intent: data.intent,
             cacheKey: data.cacheKey,
             annotationStorage: data.annotationStorage,
+            modifiedIds: data.modifiedIds,
           })
           .then(
             function (operatorListInfo) {

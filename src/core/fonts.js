@@ -26,6 +26,7 @@ import {
 import { CFFCompiler, CFFParser } from "./cff_parser.js";
 import {
   FontFlags,
+  getVerticalPresentationForm,
   MacStandardGlyphOrdering,
   normalizeFontName,
   recoverGlyphName,
@@ -798,7 +799,9 @@ function createOS2Table(properties, charstrings, override) {
   const bbox = properties.bbox || [0, 0, 0, 0];
   const unitsPerEm =
     override.unitsPerEm ||
-    1 / (properties.fontMatrix || FONT_IDENTITY_MATRIX)[0];
+    (properties.fontMatrix
+      ? 1 / Math.max(...properties.fontMatrix.slice(0, 4).map(Math.abs))
+      : 1000);
 
   // if the font units differ to the PDF glyph space units
   // then scale up the values
@@ -3196,7 +3199,9 @@ class Font {
       properties.seacMap = seacMap;
     }
 
-    const unitsPerEm = 1 / (properties.fontMatrix || FONT_IDENTITY_MATRIX)[0];
+    const unitsPerEm = properties.fontMatrix
+      ? 1 / Math.max(...properties.fontMatrix.slice(0, 4).map(Math.abs))
+      : 1000;
 
     const builder = new OpenTypeFileBuilder("\x4F\x54\x54\x4F");
     // PostScript Font Program
@@ -3359,6 +3364,13 @@ class Font {
         fontChar = String.fromCodePoint(fontCharCode);
       } else {
         warn(`charToGlyph - invalid fontCharCode: ${fontCharCode}`);
+      }
+    }
+
+    if (this.missingFile && this.vertical && fontChar.length === 1) {
+      const vertical = getVerticalPresentationForm()[fontChar.charCodeAt(0)];
+      if (vertical) {
+        fontChar = unicode = String.fromCharCode(vertical);
       }
     }
 

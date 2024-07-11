@@ -171,7 +171,12 @@ function normalizeBlendMode(value, parsingArray = false) {
   return "source-over";
 }
 
-function incrementCachedImageMaskCount(data) {
+function addLocallyCachedImageOps(opList, data) {
+  if (data.objId) {
+    opList.addDependency(data.objId);
+  }
+  opList.addImageOps(data.fn, data.args, data.optionalContent);
+
   if (data.fn === OPS.paintImageMaskXObject && data.args[0]?.count > 0) {
     data.args[0].count++;
   }
@@ -718,6 +723,7 @@ class PartialEvaluator {
 
       if (cacheKey) {
         const cacheData = {
+          objId,
           fn: OPS.paintImageMaskXObject,
           args,
           optionalContent,
@@ -870,6 +876,7 @@ class PartialEvaluator {
 
     if (cacheKey) {
       const cacheData = {
+        objId,
         fn: OPS.paintImageXObject,
         args,
         optionalContent,
@@ -1783,13 +1790,7 @@ class PartialEvaluator {
             if (isValidName) {
               const localImage = localImageCache.getByName(name);
               if (localImage) {
-                operatorList.addImageOps(
-                  localImage.fn,
-                  localImage.args,
-                  localImage.optionalContent
-                );
-
-                incrementCachedImageMaskCount(localImage);
+                addLocallyCachedImageOps(operatorList, localImage);
                 args = null;
                 continue;
               }
@@ -1807,13 +1808,7 @@ class PartialEvaluator {
                     localImageCache.getByRef(xobj) ||
                     self._regionalImageCache.getByRef(xobj);
                   if (localImage) {
-                    operatorList.addImageOps(
-                      localImage.fn,
-                      localImage.args,
-                      localImage.optionalContent
-                    );
-
-                    incrementCachedImageMaskCount(localImage);
+                    addLocallyCachedImageOps(operatorList, localImage);
                     resolveXObject();
                     return;
                   }
@@ -1928,13 +1923,7 @@ class PartialEvaluator {
             if (cacheKey) {
               const localImage = localImageCache.getByName(cacheKey);
               if (localImage) {
-                operatorList.addImageOps(
-                  localImage.fn,
-                  localImage.args,
-                  localImage.optionalContent
-                );
-
-                incrementCachedImageMaskCount(localImage);
+                addLocallyCachedImageOps(operatorList, localImage);
                 args = null;
                 continue;
               }
@@ -3863,6 +3852,11 @@ class PartialEvaluator {
             map[charCode] = String.fromCodePoint(token);
             return;
           }
+          // Add back omitted leading zeros on odd length tokens
+          // (fixes issue #18099)
+          if (token.length % 2 !== 0) {
+            token = "\u0000" + token;
+          }
           const str = [];
           for (let k = 0; k < token.length; k += 2) {
             const w1 = (token.charCodeAt(k) << 8) | token.charCodeAt(k + 1);
@@ -3916,7 +3910,7 @@ class PartialEvaluator {
     let defaultVMetrics;
     if (properties.composite) {
       const dw = dict.get("DW");
-      defaultWidth = Number.isInteger(dw) ? dw : 1000;
+      defaultWidth = typeof dw === "number" ? Math.ceil(dw) : 1000;
 
       const widths = dict.get("W");
       if (Array.isArray(widths)) {
