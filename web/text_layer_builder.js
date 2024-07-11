@@ -68,6 +68,10 @@ class TextLayerBuilder {
     this.div.className = "textLayer";
   }
 
+  get textLayer() {
+    return this.#textLayer;
+  }
+
   /**
    * Renders the text layer.
    * @param {PageViewport} viewport

@@ -36,14 +36,12 @@ function customHighlightHandler(searchKeywords = []) {
   }
   window.PDFViewerApplication.eventBus.on(
     "textlayerrendered",
-    ({ source: pageView, pageNumber, numTextDivs, error }) => {
+    ({ source: pageView, pageNumber, error }) => {
       console.warn("textlayerrendered", {
         pageView,
         pageNumber,
-        numTextDivs,
         error,
       });
-      // console.log("pageView.textLayer", pageView.textLayer);
       customHighlight({
         pageView,
         searchKeywords,
@@ -69,10 +67,12 @@ function removeCustomHighlight() {
  */
 function customHighlight({ pageView, searchKeywords = [] }) {
   const pageNumber = pageView.id;
+  const textLayerBuilder = pageView.textLayer;
+  const textLayer = pageView.textLayer.textLayer;
   // 遍历 textItems, 从 i0 -> in, i1 -> in, ..., in-1 -> in,
   // 检查是否有子字符串匹配 searchKeywords, 若有, 则将该子串样式高亮
   searchKeywords.forEach(keywords => {
-    const textItems = pageView.textLayer.textContentItemsStr;
+    const textItems = textLayer.textContentItemsStr;
     // console.log("textItems", textItems);
     // 获取所有匹配字符串
     const matchedArr = []; // 匹配结果数组
@@ -132,7 +132,7 @@ function customHighlight({ pageView, searchKeywords = [] }) {
       }
       // 单个匹配字符串完全包含关键字
       if (start === end) {
-        const node = pageView.textLayer.textDivs[start].cloneNode(true);
+        const node = textLayer.textDivs[start].cloneNode(true);
         const regex = new RegExp(`(${keywords})`);
         // eslint-disable-next-line no-unsanitized/property
         node.innerHTML = node.innerHTML.replace(
@@ -142,13 +142,13 @@ function customHighlight({ pageView, searchKeywords = [] }) {
         // 添加标记，以便销毁
         node.setAttribute("custom-highlight", `${pageNumber}-${start}-${end}`);
         // 将高亮节点添加到文本层
-        pageView.textLayer.div.append(node);
+        textLayerBuilder.div.append(node);
       }
       // 多个匹配字符串完全包含关键字
       else {
         let fullContainedStr = "";
         for (let i = start; i <= end; i += 1) {
-          const node = pageView.textLayer.textDivs[i].cloneNode(true);
+          const node = textLayer.textDivs[i].cloneNode(true);
           // 处理第一个匹配字符串
           if (i === start) {
             const firstHalfContainedStr = findLongestCommonSubstring(
@@ -190,7 +190,7 @@ function customHighlight({ pageView, searchKeywords = [] }) {
             `${pageNumber}-${start}-${end}`
           );
           // 将高亮节点添加到文本层
-          pageView.textLayer.div.append(node);
+          textLayerBuilder.div.append(node);
         }
       }
     });
